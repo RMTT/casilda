@@ -1,14 +1,14 @@
 api_version = '0.1'
 
 casilda_sources = [
-  'casilda_compositor.c',
-  'casilda_wayland_source.c',
+  'casilda-compositor.c',
+  'casilda-wayland-source.c',
 ]
 
 casilda_headers = [
   'casilda.h',
-  'casilda_compositor.h',
-  'casilda_wayland_source.h',
+  'casilda-compositor.h',
+  'casilda-wayland-source.h',
 ]
 
 version_conf = configuration_data()

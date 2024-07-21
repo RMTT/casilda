@@ -21,21 +21,20 @@
  *   Juan Pablo Ugarte <juanpablougarte@gmail.com>
  */
 
-#include "cmb_wayland_source.h"
-#include <wayland-server-core.h>
+#include "casilda-wayland-source.h"
 
 typedef struct
 {
   GSource source;
   struct wl_display *display;
-} CmbWaylandSource;
+} CasildaWaylandSource;
 
-#define CMB_WAYLAND_SOURCE(s) ((CmbWaylandSource *)s)
+#define CASILDA_WAYLAND_SOURCE(s) ((CasildaWaylandSource *)s)
 
 static gboolean
-cmb_wayland_source_prepare (GSource *base, int *timeout)
+casilda_wayland_source_prepare (GSource *base, int *timeout)
 {
-  CmbWaylandSource *source = CMB_WAYLAND_SOURCE(base);
+  CasildaWaylandSource *source = CASILDA_WAYLAND_SOURCE(base);
 
   *timeout = -1;
 
@@ -45,9 +44,9 @@ cmb_wayland_source_prepare (GSource *base, int *timeout)
 }
 
 static gboolean
-cmb_wayland_source_check (GSource *base)
+casilda_wayland_source_check (GSource *base)
 {
-  CmbWaylandSource *source = CMB_WAYLAND_SOURCE(base);
+  CasildaWaylandSource *source = CASILDA_WAYLAND_SOURCE(base);
   struct wl_event_loop *loop = wl_display_get_event_loop (source->display);
 
   /* Since there is no way to know if there are idle source, dispatch them! */
@@ -58,11 +57,11 @@ cmb_wayland_source_check (GSource *base)
 
 
 static gboolean
-cmb_wayland_source_dispatch (GSource *base,
+casilda_wayland_source_dispatch (GSource *base,
                              G_GNUC_UNUSED GSourceFunc callback,
                              G_GNUC_UNUSED void *data)
 {
-  CmbWaylandSource *source = CMB_WAYLAND_SOURCE(base);
+  CasildaWaylandSource *source = CASILDA_WAYLAND_SOURCE(base);
   struct wl_event_loop *loop = wl_display_get_event_loop (source->display);
 
   wl_event_loop_dispatch (loop, 0);
@@ -71,22 +70,22 @@ cmb_wayland_source_dispatch (GSource *base,
 }
 
 
-static GSourceFuncs cmb_wayland_source_funcs =
+static GSourceFuncs casilda_wayland_source_funcs =
 {
-  .prepare = cmb_wayland_source_prepare,
-  .check = cmb_wayland_source_check,
-  .dispatch = cmb_wayland_source_dispatch,
+  .prepare = casilda_wayland_source_prepare,
+  .check = casilda_wayland_source_check,
+  .dispatch = casilda_wayland_source_dispatch,
 };
 
 
 GSource *
-cmb_wayland_source_new (struct wl_display *display)
+casilda_wayland_source_new (struct wl_display *display)
 {
   struct wl_event_loop *loop = wl_display_get_event_loop (display);
-  GSource *source = g_source_new (&cmb_wayland_source_funcs,
-                                  sizeof (CmbWaylandSource));
+  GSource *source = g_source_new (&casilda_wayland_source_funcs,
+                                  sizeof (CasildaWaylandSource));
 
-  CMB_WAYLAND_SOURCE(source)->display = display;
+  CASILDA_WAYLAND_SOURCE(source)->display = display;
 
   g_source_add_unix_fd (source,
                         wl_event_loop_get_fd (loop),

@@ -25,13 +25,13 @@
 
 #include <gtk/gtk.h>
 
-#define CMB_COMPOSITOR_TYPE (cmb_compositor_get_type ())
-G_DECLARE_FINAL_TYPE (CmbCompositor, cmb_compositor, CMB, COMPOSITOR, GtkDrawingArea)
+#define CASILDA_COMPOSITOR_TYPE (casilda_compositor_get_type ())
+G_DECLARE_FINAL_TYPE (CasildaCompositor, casilda_compositor, CASILDA, COMPOSITOR, GtkDrawingArea)
 
-CmbCompositor *cmb_compositor_new ();
-void           cmb_compositor_cleanup (CmbCompositor *object);
-void           cmb_compositor_set_bg_color (CmbCompositor *compositor,
+CasildaCompositor *casilda_compositor_new (const gchar *socket);
+void           casilda_compositor_cleanup (CasildaCompositor *object);
+void           casilda_compositor_set_bg_color (CasildaCompositor *compositor,
                                             gdouble red,
                                             gdouble green,
                                             gdouble blue);
-void           cmb_compositor_forget_toplevel_state (CmbCompositor *compositor);
+void           casilda_compositor_forget_toplevel_state (CasildaCompositor *compositor);

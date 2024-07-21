@@ -29,6 +29,6 @@ G_BEGIN_DECLS
 # include "casilda-version.h"
 #undef CASILDA_INSIDE
 
-#include "casilda_compositor.h"
+#include "casilda-compositor.h"
 
 G_END_DECLS

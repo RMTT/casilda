@@ -1,5 +1,5 @@
 /*
- * Cambalache Wayland Compositor Widget
+ * Casilda Wayland Compositor Widget
  *
  * Copyright (C) 2024  Juan Pablo Ugarte
  *
@@ -23,8 +23,6 @@
 
 #define WLR_USE_UNSTABLE 1
 
-#include "cmb_compositor.h"
-#include "cmb_wayland_source.h"
 #include <linux/input-event-codes.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
@@ -51,6 +49,8 @@
 #include "xdg-shell-protocol.h"
 #include <xkbcommon/xkbcommon.h>
 
+#include <gtk/gtk.h>
+
 #ifdef GDK_WINDOWING_WAYLAND
 #include <gdk/wayland/gdkwayland.h>
 #endif
@@ -60,6 +60,9 @@
 #include <X11/Xlib-xcb.h>
 #include <xkbcommon/xkbcommon-x11.h>
 #endif
+
+#include "casilda-compositor.h"
+#include "casilda-wayland-source.h"
 
 /* Auto free helpers */
 typedef struct wlr_texture WlrTexture;
@@ -71,12 +74,12 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(pixman_image_t, pixman_image_unref);
 
 typedef enum
 {
-  CMB_POINTER_MODE_FOWARD,
-  CMB_POINTER_MODE_RESIZE,
-  CMB_POINTER_MODE_MOVE,
-} CmbPointerMode;
+  casilda_POINTER_MODE_FOWARD,
+  casilda_POINTER_MODE_RESIZE,
+  casilda_POINTER_MODE_MOVE,
+} CasildaPointerMode;
 
-typedef struct CmbCompositorToplevel CmbCompositorToplevel;
+typedef struct CasildaCompositorToplevel CasildaCompositorToplevel;
 
 typedef struct
 {
@@ -134,8 +137,8 @@ typedef struct
 
   /* Toplevel resize state */
   gdouble pointer_x, pointer_y; /* Current pointer position */
-  CmbCompositorToplevel *grabbed_toplevel;
-  CmbPointerMode pointer_mode;
+  CasildaCompositorToplevel *grabbed_toplevel;
+  CasildaPointerMode pointer_mode;
   gdouble grab_x, grab_y;
   struct wlr_box grab_box;
   uint32_t resize_edges;
@@ -162,10 +165,10 @@ typedef struct
   gint error_layout_width;
   gint error_layout_height;
 
-} CmbCompositorPrivate;
+} CasildaCompositorPrivate;
 
 
-struct _CmbCompositor
+struct _CasildaCompositor
 {
   GtkDrawingArea parent;
 };
@@ -175,19 +178,19 @@ typedef struct
 {
   gboolean maximized, fullscreen;
   gint x, y, width, height;
-} CmbCompositorToplevelState;
+} CasildaCompositorToplevelState;
 
 
-struct CmbCompositorToplevel
+struct CasildaCompositorToplevel
 {
-  CmbCompositorPrivate *priv;
+  CasildaCompositorPrivate *priv;
   struct wlr_xdg_toplevel *xdg_toplevel;
   struct wlr_scene_tree *scene_tree;
 
-  CmbCompositorToplevelState old_state;
+  CasildaCompositorToplevelState old_state;
 
   /* This points to priv->toplevel_state[app_id] */
-  CmbCompositorToplevelState *state;
+  CasildaCompositorToplevelState *state;
 
   /* Events */
   struct wl_listener map;
@@ -206,7 +209,7 @@ typedef struct
   struct wlr_xdg_popup *xdg_popup;
   struct wl_listener commit;
   struct wl_listener destroy;
-} CmbCompositorPopup;
+} CasildaCompositorPopup;
 
 enum
 {
@@ -229,12 +232,12 @@ static guint compositor_signals[LAST_SIGNAL] = { 0 };
 static GParamSpec *properties[N_PROPERTIES];
 
 
-G_DEFINE_TYPE_WITH_PRIVATE(CmbCompositor, cmb_compositor, GTK_TYPE_DRAWING_AREA);
-#define GET_PRIVATE(d) ((CmbCompositorPrivate *) cmb_compositor_get_instance_private((CmbCompositor*)d))
+G_DEFINE_TYPE_WITH_PRIVATE(CasildaCompositor, casilda_compositor, GTK_TYPE_DRAWING_AREA);
+#define GET_PRIVATE(d) ((CasildaCompositorPrivate *) casilda_compositor_get_instance_private((CasildaCompositor*)d))
 
 
-static void cmb_compositor_wlr_init(CmbCompositorPrivate *priv);
-static void cmb_compositor_set_error_message(CmbCompositor *compositor,
+static void casilda_compositor_wlr_init(CasildaCompositorPrivate *priv);
+static void casilda_compositor_set_error_message(CasildaCompositor *compositor,
                                              const gchar   *message);
 
 
@@ -267,13 +270,13 @@ _cairo_format_from_pixman_format (pixman_format_code_t pixman_format)
 }
 
 static void
-cmb_compositor_draw (GtkDrawingArea *area,
+casilda_compositor_draw (GtkDrawingArea *area,
                      cairo_t        *cr,
                      int             width,
                      int             height,
                      G_GNUC_UNUSED gpointer data)
 {
-  CmbCompositorPrivate *priv = GET_PRIVATE (area);
+  CasildaCompositorPrivate *priv = GET_PRIVATE (area);
   struct wlr_scene_output *scene_output = priv->scene_output;
   g_autoptr(WlrTexture) texture = NULL;
   g_autoptr(cairo_surface_t) surface = NULL;
@@ -328,10 +331,10 @@ cmb_compositor_draw (GtkDrawingArea *area,
 }
 
 static void
-on_cmb_compositor_output_frame(struct wl_listener *listener,
+on_casilda_compositor_output_frame(struct wl_listener *listener,
                                G_GNUC_UNUSED void *data)
 {
-  CmbCompositorPrivate *priv = wl_container_of(listener, priv, on_frame);
+  CasildaCompositorPrivate *priv = wl_container_of(listener, priv, on_frame);
   struct wlr_scene_output *scene_output = priv->scene_output;
 
   if (!scene_output->output->needs_frame && !pixman_region32_not_empty(
@@ -355,12 +358,12 @@ on_cmb_compositor_output_frame(struct wl_listener *listener,
 }
 
 static void
-cmb_compositor_size_allocate(GtkWidget *widget, int w, int h, int b)
+casilda_compositor_size_allocate(GtkWidget *widget, int w, int h, int b)
 {
-  CmbCompositorPrivate *priv = GET_PRIVATE (widget);
+  CasildaCompositorPrivate *priv = GET_PRIVATE (widget);
   struct wlr_output_state state;
 
-  GTK_WIDGET_CLASS (cmb_compositor_parent_class)->size_allocate (widget, w, h, b);
+  GTK_WIDGET_CLASS (casilda_compositor_parent_class)->size_allocate (widget, w, h, b);
 
   /* Update background rectangle size */
   wlr_scene_rect_set_size(priv->bg, w, h);
@@ -373,7 +376,7 @@ cmb_compositor_size_allocate(GtkWidget *widget, int w, int h, int b)
 }
 
 static void
-cmb_composite_cursor_handler_remove(CmbCompositorPrivate *priv)
+casilda_composite_cursor_handler_remove(CasildaCompositorPrivate *priv)
 {
   if (priv->on_cursor_surface_commit.link.next)
     {
@@ -383,7 +386,7 @@ cmb_composite_cursor_handler_remove(CmbCompositorPrivate *priv)
 }
 
 static void
-cmb_composite_reset_cursor(CmbCompositorPrivate *priv)
+casilda_composite_reset_cursor(CasildaCompositorPrivate *priv)
 {
   if (priv->widget)
     gtk_widget_set_cursor(priv->widget, NULL);
@@ -392,19 +395,19 @@ cmb_composite_reset_cursor(CmbCompositorPrivate *priv)
   g_clear_object(&priv->cursor_gdk_texture);
   g_clear_object(&priv->cursor_gdk_pixbuf);
 
-  cmb_composite_cursor_handler_remove(priv);
+  casilda_composite_cursor_handler_remove(priv);
 }
 
 static void
-cmb_compositor_reset_pointer_mode(CmbCompositorPrivate *priv)
+casilda_compositor_reset_pointer_mode(CasildaCompositorPrivate *priv)
 {
-  priv->pointer_mode = CMB_POINTER_MODE_FOWARD;
+  priv->pointer_mode = casilda_POINTER_MODE_FOWARD;
   priv->grabbed_toplevel = NULL;
 }
 
 
-static CmbCompositorToplevel *
-cmb_compositor_get_toplevel_at_pointer(CmbCompositorPrivate *priv,
+static CasildaCompositorToplevel *
+casilda_compositor_get_toplevel_at_pointer(CasildaCompositorPrivate *priv,
                                        struct wlr_surface **surface,
                                        double *sx,
                                        double *sy)
@@ -443,7 +446,7 @@ cmb_compositor_get_toplevel_at_pointer(CmbCompositorPrivate *priv,
 }
 
 static void
-cmb_compositor_toplevel_configure(CmbCompositorToplevel *toplevel,
+casilda_compositor_toplevel_configure(CasildaCompositorToplevel *toplevel,
                                   gint x,
                                   gint y,
                                   gint width,
@@ -460,9 +463,9 @@ cmb_compositor_toplevel_configure(CmbCompositorToplevel *toplevel,
 }
 
 static void
-cmb_compositor_toplevel_save_position(CmbCompositorToplevel *toplevel)
+casilda_compositor_toplevel_save_position(CasildaCompositorToplevel *toplevel)
 {
-  CmbCompositorToplevelState *state = toplevel->state;
+  CasildaCompositorToplevelState *state = toplevel->state;
 
   if (!state)
     return;
@@ -483,11 +486,11 @@ cmb_compositor_toplevel_save_position(CmbCompositorToplevel *toplevel)
 }
 
 static void
-cmb_compositor_toplevel_save_size(CmbCompositorToplevel *toplevel,
+casilda_compositor_toplevel_save_size(CasildaCompositorToplevel *toplevel,
                                   gint width,
                                   gint height)
 {
-  CmbCompositorToplevelState *state = toplevel->state;
+  CasildaCompositorToplevelState *state = toplevel->state;
 
   if (!state)
     return;
@@ -507,13 +510,13 @@ cmb_compositor_toplevel_save_size(CmbCompositorToplevel *toplevel,
           state->fullscreen);
 }
 
-void
-cmb_compositor_toplevel_toggle_maximize_fullscreen(CmbCompositorToplevel *toplevel,
+static void
+casilda_compositor_toplevel_toggle_maximize_fullscreen(CasildaCompositorToplevel *toplevel,
                                                    gboolean fullscreen)
 {
-  CmbCompositorPrivate *priv = toplevel->priv;
+  CasildaCompositorPrivate *priv = toplevel->priv;
   struct wlr_xdg_toplevel *xdg_toplevel = toplevel->xdg_toplevel;
-  CmbCompositorToplevelState *state = toplevel->state;
+  CasildaCompositorToplevelState *state = toplevel->state;
   gboolean value;
 
   if (!xdg_toplevel->base->initialized || !xdg_toplevel->base->configured)
@@ -551,14 +554,14 @@ cmb_compositor_toplevel_toggle_maximize_fullscreen(CmbCompositorToplevel *toplev
       toplevel->old_state.width = xdg_toplevel->current.width;
       toplevel->old_state.height = xdg_toplevel->current.height;
 
-      cmb_compositor_toplevel_configure(toplevel,
+      casilda_compositor_toplevel_configure(toplevel,
                                         0, 0,
                                         gtk_widget_get_width(widget),
                                         gtk_widget_get_height(widget));
     }
   else
     {
-      cmb_compositor_toplevel_configure(toplevel,
+      casilda_compositor_toplevel_configure(toplevel,
                                         toplevel->old_state.x,
                                         toplevel->old_state.y,
                                         toplevel->old_state.width,
@@ -567,9 +570,9 @@ cmb_compositor_toplevel_toggle_maximize_fullscreen(CmbCompositorToplevel *toplev
 }
 
 static void
-cmb_compositor_handle_pointer_resize_toplevel(CmbCompositorPrivate *priv)
+casilda_compositor_handle_pointer_resize_toplevel(CasildaCompositorPrivate *priv)
 {
-  CmbCompositorToplevel *toplevel = priv->grabbed_toplevel;
+  CasildaCompositorToplevel *toplevel = priv->grabbed_toplevel;
   struct wlr_xdg_toplevel *xdg_toplevel = toplevel->xdg_toplevel;
   struct wlr_box box;
   gint border_x = priv->pointer_x - priv->grab_x;
@@ -640,35 +643,35 @@ cmb_compositor_handle_pointer_resize_toplevel(CmbCompositorPrivate *priv)
                               new_left - box.x,
                               new_top - box.y);
 
-  cmb_compositor_toplevel_save_position(toplevel);
-  cmb_compositor_toplevel_save_size(toplevel, new_width, new_height);
+  casilda_compositor_toplevel_save_position(toplevel);
+  casilda_compositor_toplevel_save_size(toplevel, new_width, new_height);
 }
 
 static void
-cmb_compositor_handle_pointer_motion(CmbCompositorPrivate *priv)
+casilda_compositor_handle_pointer_motion(CasildaCompositorPrivate *priv)
 {
-  if (priv->pointer_mode == CMB_POINTER_MODE_MOVE)
+  if (priv->pointer_mode == casilda_POINTER_MODE_MOVE)
     {
       wlr_scene_node_set_position(&priv->grabbed_toplevel->scene_tree->node,
                                   priv->pointer_x - priv->grab_x,
                                   priv->pointer_y - priv->grab_y);
 
-      cmb_compositor_toplevel_save_position(priv->grabbed_toplevel);
+      casilda_compositor_toplevel_save_position(priv->grabbed_toplevel);
     }
-  else if (priv->pointer_mode == CMB_POINTER_MODE_RESIZE)
+  else if (priv->pointer_mode == casilda_POINTER_MODE_RESIZE)
     {
-      cmb_compositor_handle_pointer_resize_toplevel(priv);
+      casilda_compositor_handle_pointer_resize_toplevel(priv);
     }
   else
     {
-      CmbCompositorToplevel *toplevel;
+      CasildaCompositorToplevel *toplevel;
       struct wlr_surface *surface;
       double sx, sy;
 
-      toplevel = cmb_compositor_get_toplevel_at_pointer(priv, &surface, &sx, &sy);
+      toplevel = casilda_compositor_get_toplevel_at_pointer(priv, &surface, &sx, &sy);
 
       if (!toplevel)
-        cmb_composite_reset_cursor(priv);
+        casilda_composite_reset_cursor(priv);
 
       if (surface)
         {
@@ -685,17 +688,17 @@ static void
 on_motion_controller_enter (G_GNUC_UNUSED GtkEventControllerMotion *self,
                             gdouble x,
                             gdouble y,
-                            CmbCompositorPrivate *priv)
+                            CasildaCompositorPrivate *priv)
 {
   priv->pointer_x = x;
   priv->pointer_y = y;
-  cmb_compositor_handle_pointer_motion(priv);
+  casilda_compositor_handle_pointer_motion(priv);
   wlr_seat_pointer_notify_frame(priv->seat);
 }
 
 static void
 on_motion_controller_leave (G_GNUC_UNUSED GtkEventControllerMotion *self,
-                            CmbCompositorPrivate *priv)
+                            CasildaCompositorPrivate *priv)
 {
   wlr_seat_pointer_clear_focus(priv->seat);
 }
@@ -704,13 +707,13 @@ static void
 on_motion_controller_motion (G_GNUC_UNUSED GtkEventControllerMotion *self,
                              gdouble x,
                              gdouble y,
-                             CmbCompositorPrivate *priv)
+                             CasildaCompositorPrivate *priv)
 {
   /* Clamp pointer to widget coordinates */
   priv->pointer_x = CLAMP(x, 0, gtk_widget_get_width (priv->widget));
   priv->pointer_y = CLAMP(y, 0, gtk_widget_get_height (priv->widget));
 
-  cmb_compositor_handle_pointer_motion(priv);
+  casilda_compositor_handle_pointer_motion(priv);
   wlr_seat_pointer_notify_frame(priv->seat);
 }
 
@@ -718,7 +721,7 @@ static gboolean
 on_scroll_controller_scroll (GtkEventControllerScroll *self,
                              gdouble dx,
                              gdouble dy,
-                             CmbCompositorPrivate *priv)
+                             CasildaCompositorPrivate *priv)
 {
   uint32_t time_msec = gtk_event_controller_get_current_event_time(GTK_EVENT_CONTROLLER(self));
   gint idx, idy;
@@ -750,10 +753,10 @@ on_scroll_controller_scroll (GtkEventControllerScroll *self,
 }
 
 static void
-cmb_compositor_focus_toplevel(CmbCompositorToplevel *toplevel,
+casilda_compositor_focus_toplevel(CasildaCompositorToplevel *toplevel,
                               struct wlr_surface    *surface)
 {
-  CmbCompositorPrivate *priv = toplevel->priv;
+  CasildaCompositorPrivate *priv = toplevel->priv;
   struct wlr_surface *focused_surface = priv->seat->keyboard_state.focused_surface;
 
   if (focused_surface == surface)
@@ -783,14 +786,14 @@ cmb_compositor_focus_toplevel(CmbCompositorToplevel *toplevel,
 }
 
 static void
-cmb_compositor_seat_pointer_notify(GtkGestureClick       *self,
-                                   CmbCompositorPrivate  *priv,
+casilda_compositor_seat_pointer_notify(GtkGestureClick       *self,
+                                   CasildaCompositorPrivate  *priv,
                                    gint                   button,
                                    enum wl_pointer_button_state state)
 {
   uint32_t time_msec, wl_button;
   struct wlr_surface *surface = NULL;
-  CmbCompositorToplevel *toplevel;
+  CasildaCompositorToplevel *toplevel;
   double sx, sy;
 
   button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(self));
@@ -812,12 +815,12 @@ cmb_compositor_seat_pointer_notify(GtkGestureClick       *self,
   wlr_seat_pointer_notify_button(priv->seat, time_msec, wl_button, state);
   wlr_seat_pointer_notify_frame(priv->seat);
 
-  toplevel = cmb_compositor_get_toplevel_at_pointer(priv, &surface, &sx, &sy);
+  toplevel = casilda_compositor_get_toplevel_at_pointer(priv, &surface, &sx, &sy);
 
   if (state == WL_POINTER_BUTTON_STATE_RELEASED)
-    cmb_compositor_reset_pointer_mode(priv);
+    casilda_compositor_reset_pointer_mode(priv);
   else if (toplevel)
-    cmb_compositor_focus_toplevel(toplevel, surface);
+    casilda_compositor_focus_toplevel(toplevel, surface);
 }
 
 static void
@@ -825,7 +828,7 @@ on_click_gesture_pressed (GtkGestureClick *self,
                           G_GNUC_UNUSED gint n_press,
                           gdouble x,
                           gdouble y,
-                          CmbCompositorPrivate *priv)
+                          CasildaCompositorPrivate *priv)
 {
   gint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(self));
 
@@ -841,7 +844,7 @@ on_click_gesture_pressed (GtkGestureClick *self,
       return;
     }
 
-  cmb_compositor_seat_pointer_notify(self, priv, button, WL_POINTER_BUTTON_STATE_PRESSED);
+  casilda_compositor_seat_pointer_notify(self, priv, button, WL_POINTER_BUTTON_STATE_PRESSED);
 }
 
 static void
@@ -849,18 +852,18 @@ on_click_gesture_released (GtkGestureClick* self,
                            G_GNUC_UNUSED gint n_press,
                            G_GNUC_UNUSED gdouble x,
                            G_GNUC_UNUSED gdouble y,
-                           CmbCompositorPrivate *priv)
+                           CasildaCompositorPrivate *priv)
 {
   gint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(self));
   if (button == 3)
     return;
 
-  cmb_compositor_seat_pointer_notify(self, priv, button, WL_POINTER_BUTTON_STATE_RELEASED);
+  casilda_compositor_seat_pointer_notify(self, priv, button, WL_POINTER_BUTTON_STATE_RELEASED);
 }
 
 static void
-cmb_compositor_seat_key_notify(GtkEventControllerKey *self,
-                               CmbCompositorPrivate  *priv,
+casilda_compositor_seat_key_notify(GtkEventControllerKey *self,
+                               CasildaCompositorPrivate  *priv,
                                uint32_t key,
                                uint32_t state)
 {
@@ -873,9 +876,9 @@ on_key_controller_key_pressed (GtkEventControllerKey* self,
                                G_GNUC_UNUSED guint keyval,
                                guint keycode,
                                G_GNUC_UNUSED GdkModifierType state,
-                               CmbCompositorPrivate *priv)
+                               CasildaCompositorPrivate *priv)
 {
-  cmb_compositor_seat_key_notify(self, priv, keycode, WL_KEYBOARD_KEY_STATE_PRESSED);
+  casilda_compositor_seat_key_notify(self, priv, keycode, WL_KEYBOARD_KEY_STATE_PRESSED);
   return TRUE;
 }
 
@@ -884,15 +887,15 @@ on_key_controller_key_released (GtkEventControllerKey* self,
                                 G_GNUC_UNUSED guint keyval,
                                 guint keycode,
                                 G_GNUC_UNUSED GdkModifierType state,
-                                CmbCompositorPrivate *priv)
+                                CasildaCompositorPrivate *priv)
 {
-  cmb_compositor_seat_key_notify(self, priv, keycode, WL_KEYBOARD_KEY_STATE_RELEASED);
+  casilda_compositor_seat_key_notify(self, priv, keycode, WL_KEYBOARD_KEY_STATE_RELEASED);
 }
 
 static gboolean
 on_key_controller_modifiers (G_GNUC_UNUSED GtkEventControllerKey *self,
                              GdkModifierType state,
-                             CmbCompositorPrivate *priv)
+                             CasildaCompositorPrivate *priv)
 {
   struct wlr_keyboard_modifiers modifiers = { 0, };
   guint wl_state = 0;
@@ -928,10 +931,11 @@ _on_pixbuf_destroy_notify (guchar *pixels, G_GNUC_UNUSED gpointer data)
 static void
 cursor_handle_surface_commit(struct wl_listener *listener, void *data)
 {
-  CmbCompositorPrivate *priv = wl_container_of(listener, priv, on_cursor_surface_commit);
+  CasildaCompositorPrivate *priv = wl_container_of(listener, priv, on_cursor_surface_commit);
   struct wlr_surface *surface = data;
   WlrTexture *texture = NULL;
   pixman_image_t *image = NULL;
+  gint height, stride;
 
   if (!(texture = wlr_surface_get_texture(surface)))
     return;
@@ -944,11 +948,9 @@ cursor_handle_surface_commit(struct wl_listener *listener, void *data)
 
   if (pixman_image_get_format (image) != PIXMAN_a8r8g8b8)
     {
-      cmb_composite_reset_cursor(priv);
+      casilda_composite_reset_cursor(priv);
       return;
     }
-
-  gint height, stride;
 
   height = pixman_image_get_height (image);
   stride = pixman_image_get_stride (image);
@@ -982,13 +984,13 @@ cursor_handle_surface_commit(struct wl_listener *listener, void *data)
     gtk_widget_set_cursor(priv->widget, priv->cursor_gdk_cursor);
 
   /* Unlink handler */
-  cmb_composite_cursor_handler_remove(priv);
+  casilda_composite_cursor_handler_remove(priv);
 }
 
 static void
 on_seat_request_cursor(struct wl_listener *listener, void *data)
 {
-  CmbCompositorPrivate *priv = wl_container_of(listener, priv, on_request_cursor);
+  CasildaCompositorPrivate *priv = wl_container_of(listener, priv, on_request_cursor);
   struct wlr_seat_pointer_request_set_cursor_event *event = data;
   struct wlr_seat_client *focused_client =
     priv->seat->pointer_state.focused_client;
@@ -1006,7 +1008,7 @@ on_seat_request_cursor(struct wl_listener *listener, void *data)
   wlr_surface_send_enter(surface, &priv->output);
 
   /* We only keep track of the last cursor change */
-  cmb_composite_cursor_handler_remove(priv);
+  casilda_composite_cursor_handler_remove(priv);
 
   /* Update cursor once the surface has been committed */
   wl_signal_add(&surface->events.commit, &priv->on_cursor_surface_commit);
@@ -1014,59 +1016,59 @@ on_seat_request_cursor(struct wl_listener *listener, void *data)
 }
 
 static bool
-cmb_compositor_backend_start(struct wlr_backend *wlr_backend)
+casilda_compositor_backend_start(struct wlr_backend *wlr_backend)
 {
-  CmbCompositorPrivate *priv = wl_container_of(wlr_backend, priv, backend);
-  g_info("Starting cmb backend");
+  CasildaCompositorPrivate *priv = wl_container_of(wlr_backend, priv, backend);
+  g_info("Starting Casilda backend");
   priv->backend_started = true;
   return true;
 }
 
 static void
-cmb_compositor_backend_destroy(struct wlr_backend *wlr_backend)
+casilda_compositor_backend_destroy(struct wlr_backend *wlr_backend)
 {
-  CmbCompositorPrivate *priv = wl_container_of(wlr_backend, priv, backend);
+  CasildaCompositorPrivate *priv = wl_container_of(wlr_backend, priv, backend);
   wlr_backend_finish(&priv->backend);
   wlr_output_destroy(&priv->output);
 }
 
 static uint32_t
-cmb_compositor_backend_get_buffer_caps(G_GNUC_UNUSED struct wlr_backend *wlr_backend)
+casilda_compositor_backend_get_buffer_caps(G_GNUC_UNUSED struct wlr_backend *wlr_backend)
 {
   return WLR_BUFFER_CAP_DATA_PTR | WLR_BUFFER_CAP_DMABUF | WLR_BUFFER_CAP_SHM;
 }
 
 static bool
-cmb_compositor_output_commit(G_GNUC_UNUSED struct wlr_output *wlr_output,
+casilda_compositor_output_commit(G_GNUC_UNUSED struct wlr_output *wlr_output,
                              G_GNUC_UNUSED const struct wlr_output_state *state)
 {
   return true;
 }
 
-static void cmb_compositor_output_destroy(G_GNUC_UNUSED struct wlr_output *wlr_output)
+static void casilda_compositor_output_destroy(G_GNUC_UNUSED struct wlr_output *wlr_output)
 {
   /* TODO: disconnect from GdkFrameClock */
 }
 
 static void
-cmb_compositor_backend_init(CmbCompositorPrivate *priv)
+casilda_compositor_backend_init(CasildaCompositorPrivate *priv)
 {
-  priv->backend_impl.start = cmb_compositor_backend_start;
-  priv->backend_impl.destroy = cmb_compositor_backend_destroy;
-  priv->backend_impl.get_buffer_caps = cmb_compositor_backend_get_buffer_caps;
+  priv->backend_impl.start = casilda_compositor_backend_start;
+  priv->backend_impl.destroy = casilda_compositor_backend_destroy;
+  priv->backend_impl.get_buffer_caps = casilda_compositor_backend_get_buffer_caps;
   wlr_backend_init(&priv->backend, &priv->backend_impl);
 }
 
 static void
-cmb_compositor_output_init(CmbCompositorPrivate *priv)
+casilda_compositor_output_init(CasildaCompositorPrivate *priv)
 {
   struct wlr_output_state state;
 
   wlr_output_state_init(&state);
 
   /* Initialize custom output iface */
-  priv->output_impl.commit = cmb_compositor_output_commit;
-  priv->output_impl.destroy = cmb_compositor_output_destroy;
+  priv->output_impl.commit = casilda_compositor_output_commit;
+  priv->output_impl.destroy = casilda_compositor_output_destroy;
 
   /* Actual size will be set on size_allocate() */
   wlr_output_state_set_custom_mode(&state, 0, 0, 0);
@@ -1079,14 +1081,14 @@ cmb_compositor_output_init(CmbCompositorPrivate *priv)
                   &state);
 
   /* Set a name */
-  wlr_output_set_name(&priv->output, "CmbCompositor");
-  wlr_output_set_description(&priv->output, "CmbCompositor output");
+  wlr_output_set_name(&priv->output, "CasildaCompositor");
+  wlr_output_set_description(&priv->output, "CasildaCompositor output");
 
   /* Init output rendering */
   wlr_output_init_render(&priv->output, priv->allocator, priv->renderer);
 
   /* Sets up a listener for the frame event. */
-  priv->on_frame.notify = on_cmb_compositor_output_frame;
+  priv->on_frame.notify = on_casilda_compositor_output_frame;
   wl_signal_add(&priv->output.events.frame, &priv->on_frame);
 
   /* Create a scene output */
@@ -1099,9 +1101,9 @@ cmb_compositor_output_init(CmbCompositorPrivate *priv)
 }
 
 static void
-cmb_pointer_mode_init(CmbCompositorPrivate *priv)
+casilda_pointer_mode_init(CasildaCompositorPrivate *priv)
 {
-  wlr_pointer_init(&priv->pointer, NULL, "cmb-pointer");
+  wlr_pointer_init(&priv->pointer, NULL, "Casilda-pointer");
 
   priv->on_request_cursor.notify = on_seat_request_cursor;
   wl_signal_add(&priv->seat->events.request_set_cursor,
@@ -1140,7 +1142,7 @@ cmb_pointer_mode_init(CmbCompositorPrivate *priv)
 }
 
 static void
-cmb_compositor_keyboard_init(CmbCompositorPrivate *priv)
+casilda_compositor_keyboard_init(CasildaCompositorPrivate *priv)
 {
   struct xkb_keymap *keymap = NULL;
   struct xkb_state *state = NULL;
@@ -1148,7 +1150,7 @@ cmb_compositor_keyboard_init(CmbCompositorPrivate *priv)
   GdkDisplay *gdisplay;
   GdkSeat *gseat;
 
-  wlr_keyboard_init(&priv->keyboard, NULL, "cmb-keyboard");
+  wlr_keyboard_init(&priv->keyboard, NULL, "Casilda-keyboard");
 
   gdisplay = gtk_widget_get_display(priv->widget);
   gseat = gdk_display_get_default_seat(gdisplay);
@@ -1237,12 +1239,12 @@ cmb_compositor_keyboard_init(CmbCompositorPrivate *priv)
 }
 
 static void
-cmb_compositor_init (CmbCompositor *object)
+casilda_compositor_init (CasildaCompositor *object)
 {
-  CmbCompositorPrivate *priv = GET_PRIVATE (object);
+  CasildaCompositorPrivate *priv = GET_PRIVATE (object);
 
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(object),
-                                 cmb_compositor_draw,
+                                 casilda_compositor_draw,
                                  NULL,
                                  NULL);
   priv->widget = GTK_WIDGET(object);
@@ -1254,15 +1256,15 @@ cmb_compositor_init (CmbCompositor *object)
                                                g_free,
                                                g_free);
 
-  cmb_compositor_backend_init(priv);
-  cmb_compositor_wlr_init (priv);
-  cmb_compositor_output_init(priv);
-  cmb_pointer_mode_init(priv);
-  cmb_compositor_keyboard_init(priv);
+  casilda_compositor_backend_init(priv);
+  casilda_compositor_wlr_init (priv);
+  casilda_compositor_output_init(priv);
+  casilda_pointer_mode_init(priv);
+  casilda_compositor_keyboard_init(priv);
 
-  cmb_compositor_reset_pointer_mode(priv);
+  casilda_compositor_reset_pointer_mode(priv);
 
-  priv->wl_source = cmb_wayland_source_new(priv->wl_display);
+  priv->wl_source = casilda_wayland_source_new(priv->wl_display);
   g_source_attach (priv->wl_source, NULL);
 
   /* Start the backend. */
@@ -1274,9 +1276,9 @@ cmb_compositor_init (CmbCompositor *object)
 }
 
 void
-cmb_compositor_cleanup (CmbCompositor *object)
+casilda_compositor_cleanup (CasildaCompositor *object)
 {
-  CmbCompositorPrivate *priv = GET_PRIVATE (object);
+  CasildaCompositorPrivate *priv = GET_PRIVATE (object);
 
   g_clear_pointer(&priv->toplevel_state, g_hash_table_destroy);
   g_clear_pointer(&priv->socket, g_free);
@@ -1288,7 +1290,7 @@ cmb_compositor_cleanup (CmbCompositor *object)
   g_clear_object(&priv->click_gesture);
 
   priv->widget = NULL;
-  cmb_composite_reset_cursor(priv);
+  casilda_composite_reset_cursor(priv);
 
   wl_display_destroy_clients(priv->wl_display);
 
@@ -1303,26 +1305,26 @@ cmb_compositor_cleanup (CmbCompositor *object)
   g_source_destroy (priv->wl_source);
 }
 
-void
-cmb_compositor_finalize (GObject *object)
+static void
+casilda_compositor_finalize (GObject *object)
 {
-  cmb_compositor_cleanup(CMB_COMPOSITOR(object));
-  G_OBJECT_CLASS (cmb_compositor_parent_class)->finalize (object);
+  casilda_compositor_cleanup(CASILDA_COMPOSITOR(object));
+  G_OBJECT_CLASS (casilda_compositor_parent_class)->finalize (object);
 }
 
 
 static void
-cmb_compositor_set_property (GObject      *object,
+casilda_compositor_set_property (GObject      *object,
                              guint         prop_id,
                              const GValue *value,
                              GParamSpec   *pspec)
 {
-  g_return_if_fail (CMB_IS_COMPOSITOR (object));
+  g_return_if_fail (CASILDA_IS_COMPOSITOR (object));
 
   switch (prop_id)
     {
       case PROP_ERROR_MESSAGE:
-        cmb_compositor_set_error_message (CMB_COMPOSITOR (object),
+        casilda_compositor_set_error_message (CASILDA_COMPOSITOR (object),
                                           g_value_get_string (value));
       break;
       default:
@@ -1332,14 +1334,14 @@ cmb_compositor_set_property (GObject      *object,
 }
 
 static void
-cmb_compositor_get_property (GObject    *object,
+casilda_compositor_get_property (GObject    *object,
                              guint       prop_id,
                              GValue     *value,
                              GParamSpec *pspec)
 {
-  CmbCompositorPrivate *priv;
+  CasildaCompositorPrivate *priv;
 
-  g_return_if_fail (CMB_IS_COMPOSITOR (object));
+  g_return_if_fail (CASILDA_IS_COMPOSITOR (object));
   priv = GET_PRIVATE (object);
 
   switch (prop_id)
@@ -1357,30 +1359,30 @@ cmb_compositor_get_property (GObject    *object,
 }
 
 static void
-on_cmb_compositor_frame_clock_update (G_GNUC_UNUSED GdkFrameClock *self,
-                                      CmbCompositorPrivate *priv)
+on_casilda_compositor_frame_clock_update (G_GNUC_UNUSED GdkFrameClock *self,
+                                      CasildaCompositorPrivate *priv)
 {
   wlr_output_send_frame(&priv->output);
 }
 
 static void
-cmb_compositor_realize(GtkWidget *widget)
+casilda_compositor_realize(GtkWidget *widget)
 {
-  CmbCompositorPrivate *priv = GET_PRIVATE (widget);
+  CasildaCompositorPrivate *priv = GET_PRIVATE (widget);
 
-  GTK_WIDGET_CLASS (cmb_compositor_parent_class)->realize (widget);
+  GTK_WIDGET_CLASS (casilda_compositor_parent_class)->realize (widget);
 
   priv->frame_clock = gtk_widget_get_frame_clock(widget);
   priv->frame_clock_source =
     g_signal_connect(priv->frame_clock, "update",
-                     G_CALLBACK(on_cmb_compositor_frame_clock_update),
+                     G_CALLBACK(on_casilda_compositor_frame_clock_update),
                      priv);
 }
 
 static void
-cmb_compositor_unrealize(GtkWidget *widget)
+casilda_compositor_unrealize(GtkWidget *widget)
 {
-  CmbCompositorPrivate *priv = GET_PRIVATE (widget);
+  CasildaCompositorPrivate *priv = GET_PRIVATE (widget);
 
   if (priv->frame_clock && priv->frame_clock_source)
     {
@@ -1388,22 +1390,22 @@ cmb_compositor_unrealize(GtkWidget *widget)
       priv->frame_clock_source = 0;
     }
 
-  GTK_WIDGET_CLASS (cmb_compositor_parent_class)->unrealize (widget);
+  GTK_WIDGET_CLASS (casilda_compositor_parent_class)->unrealize (widget);
 }
 
 static void
-cmb_compositor_class_init (CmbCompositorClass *klass)
+casilda_compositor_class_init (CasildaCompositorClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
-  object_class->finalize = cmb_compositor_finalize;
-  object_class->set_property = cmb_compositor_set_property;
-  object_class->get_property = cmb_compositor_get_property;
+  object_class->finalize = casilda_compositor_finalize;
+  object_class->set_property = casilda_compositor_set_property;
+  object_class->get_property = casilda_compositor_get_property;
 
-  widget_class->size_allocate = cmb_compositor_size_allocate;
-  widget_class->realize = cmb_compositor_realize;
-  widget_class->unrealize = cmb_compositor_unrealize;
+  widget_class->size_allocate = casilda_compositor_size_allocate;
+  widget_class->realize = casilda_compositor_realize;
+  widget_class->unrealize = casilda_compositor_unrealize;
 
   /* Properties */
   properties[PROP_SOCKET] =
@@ -1432,10 +1434,10 @@ cmb_compositor_class_init (CmbCompositorClass *klass)
 }
 
 
-CmbCompositor *
-cmb_compositor_new (const gchar *socket)
+CasildaCompositor *
+casilda_compositor_new (const gchar *socket)
 {
-  return g_object_new (CMB_COMPOSITOR_TYPE, "socket", socket, NULL);
+  return g_object_new (CASILDA_COMPOSITOR_TYPE, "socket", socket, NULL);
 }
 
 /* wlroots */
@@ -1443,7 +1445,7 @@ cmb_compositor_new (const gchar *socket)
 static void
 seat_request_set_selection(struct wl_listener *listener, void *data)
 {
-  CmbCompositorPrivate *priv = wl_container_of(listener, priv, request_set_selection);
+  CasildaCompositorPrivate *priv = wl_container_of(listener, priv, request_set_selection);
   struct wlr_seat_request_set_selection_event *event = data;
 
   wlr_seat_set_selection(priv->seat, event->source, event->serial);
@@ -1453,13 +1455,13 @@ seat_request_set_selection(struct wl_listener *listener, void *data)
 static void
 xdg_toplevel_map(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 {
-  CmbCompositorToplevel *toplevel = wl_container_of(listener, toplevel, map);
+  CasildaCompositorToplevel *toplevel = wl_container_of(listener, toplevel, map);
   struct wlr_xdg_toplevel *xdg_toplevel = toplevel->xdg_toplevel;
-  CmbCompositorToplevelState *state = toplevel->state;
+  CasildaCompositorToplevelState *state = toplevel->state;
 
   toplevel->priv->toplevels = g_list_prepend(toplevel->priv->toplevels, toplevel);
 
-  cmb_compositor_focus_toplevel(toplevel, xdg_toplevel->base->surface);
+  casilda_compositor_focus_toplevel(toplevel, xdg_toplevel->base->surface);
 
   if (state)
     {
@@ -1483,13 +1485,13 @@ xdg_toplevel_map(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 
           toplevel->old_state = *state;
 
-          cmb_compositor_toplevel_configure(toplevel,
+          casilda_compositor_toplevel_configure(toplevel,
                                             0, 0,
                                             gtk_widget_get_width(widget),
                                             gtk_widget_get_height(widget));
         }
       else
-        cmb_compositor_toplevel_configure(toplevel,
+        casilda_compositor_toplevel_configure(toplevel,
                                           state->x,
                                           state->y,
                                           state->width,
@@ -1500,10 +1502,10 @@ xdg_toplevel_map(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 static void
 xdg_toplevel_unmap(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 {
-  CmbCompositorToplevel *toplevel = wl_container_of(listener, toplevel, unmap);
+  CasildaCompositorToplevel *toplevel = wl_container_of(listener, toplevel, unmap);
 
   if (toplevel == toplevel->priv->grabbed_toplevel)
-    cmb_compositor_reset_pointer_mode(toplevel->priv);
+    casilda_compositor_reset_pointer_mode(toplevel->priv);
 
   toplevel->state = NULL;
 
@@ -1513,7 +1515,7 @@ xdg_toplevel_unmap(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 static void
 xdg_toplevel_commit(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 {
-  CmbCompositorToplevel *toplevel = wl_container_of(listener, toplevel, commit);
+  CasildaCompositorToplevel *toplevel = wl_container_of(listener, toplevel, commit);
 
   if (toplevel->xdg_toplevel->base->initial_commit)
     wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
@@ -1522,7 +1524,7 @@ xdg_toplevel_commit(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 static void
 xdg_toplevel_destroy(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 {
-  CmbCompositorToplevel *toplevel = wl_container_of(listener, toplevel, destroy);
+  CasildaCompositorToplevel *toplevel = wl_container_of(listener, toplevel, destroy);
 
   wl_list_remove(&toplevel->map.link);
   wl_list_remove(&toplevel->unmap.link);
@@ -1537,9 +1539,9 @@ xdg_toplevel_destroy(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 }
 
 static gboolean
-cmb_compositor_toplevel_has_focus(CmbCompositorToplevel *toplevel)
+casilda_compositor_toplevel_has_focus(CasildaCompositorToplevel *toplevel)
 {
-  CmbCompositorPrivate *priv = toplevel->priv;
+  CasildaCompositorPrivate *priv = toplevel->priv;
   struct wlr_surface *focused_surface =
     priv->seat->pointer_state.focused_surface;
 
@@ -1550,14 +1552,14 @@ cmb_compositor_toplevel_has_focus(CmbCompositorToplevel *toplevel)
 static void
 xdg_toplevel_request_move(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 {
-  CmbCompositorToplevel *toplevel = wl_container_of(listener, toplevel, request_move);
-  CmbCompositorPrivate *priv = toplevel->priv;
+  CasildaCompositorToplevel *toplevel = wl_container_of(listener, toplevel, request_move);
+  CasildaCompositorPrivate *priv = toplevel->priv;
 
-  if (!cmb_compositor_toplevel_has_focus(toplevel))
+  if (!casilda_compositor_toplevel_has_focus(toplevel))
     return;
 
   priv->grabbed_toplevel = toplevel;
-  priv->pointer_mode = CMB_POINTER_MODE_MOVE;
+  priv->pointer_mode = casilda_POINTER_MODE_MOVE;
   priv->grab_x = priv->pointer_x - toplevel->scene_tree->node.x;
   priv->grab_y = priv->pointer_y - toplevel->scene_tree->node.y;
 }
@@ -1565,18 +1567,18 @@ xdg_toplevel_request_move(struct wl_listener *listener, G_GNUC_UNUSED void *data
 static void
 xdg_toplevel_request_resize(struct wl_listener *listener, void *data)
 {
-  CmbCompositorToplevel *toplevel = wl_container_of(listener, toplevel, request_resize);
-  CmbCompositorPrivate *priv = toplevel->priv;
+  CasildaCompositorToplevel *toplevel = wl_container_of(listener, toplevel, request_resize);
+  CasildaCompositorPrivate *priv = toplevel->priv;
   struct wlr_scene_tree *scene_tree = toplevel->scene_tree;
   struct wlr_xdg_toplevel_resize_event *event = data;
   struct wlr_box box;
   double border_x, border_y;
 
-  if (!cmb_compositor_toplevel_has_focus(toplevel))
+  if (!casilda_compositor_toplevel_has_focus(toplevel))
     return;
 
   priv->grabbed_toplevel = toplevel;
-  priv->pointer_mode = CMB_POINTER_MODE_RESIZE;
+  priv->pointer_mode = casilda_POINTER_MODE_RESIZE;
   priv->resize_edges = event->edges;
 
   wlr_xdg_surface_get_geometry(toplevel->xdg_toplevel->base, &box);
@@ -1596,31 +1598,31 @@ xdg_toplevel_request_resize(struct wl_listener *listener, void *data)
 static void
 xdg_toplevel_request_maximize(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 {
-  CmbCompositorToplevel *toplevel =
+  CasildaCompositorToplevel *toplevel =
     wl_container_of(listener, toplevel, request_maximize);
 
-  cmb_compositor_toplevel_toggle_maximize_fullscreen(toplevel, FALSE);
+  casilda_compositor_toplevel_toggle_maximize_fullscreen(toplevel, FALSE);
 }
 
 static void
 xdg_toplevel_request_fullscreen(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 {
-  CmbCompositorToplevel *toplevel =
+  CasildaCompositorToplevel *toplevel =
     wl_container_of(listener, toplevel, request_fullscreen);
 
-  cmb_compositor_toplevel_toggle_maximize_fullscreen(toplevel, TRUE);
+  casilda_compositor_toplevel_toggle_maximize_fullscreen(toplevel, TRUE);
 }
 
 static void
 xdg_toplevel_set_app_id(struct wl_listener *listener,G_GNUC_UNUSED  void *data)
 {
-  CmbCompositorToplevel *toplevel =
+  CasildaCompositorToplevel *toplevel =
     wl_container_of(listener, toplevel, set_app_id);
   const gchar *app_id = toplevel->xdg_toplevel->app_id;
 
   toplevel->state = NULL;
 
-  if (!g_str_has_prefix (app_id, "Cmb:"))
+  if (!g_str_has_prefix (app_id, "Casilda:"))
     return;
 
   toplevel->state = g_hash_table_lookup(toplevel->priv->toplevel_state, app_id);
@@ -1628,7 +1630,7 @@ xdg_toplevel_set_app_id(struct wl_listener *listener,G_GNUC_UNUSED  void *data)
   if (!toplevel->state)
     {
       /* Allocate new state struct */
-      toplevel->state = g_new0(CmbCompositorToplevelState, 1);
+      toplevel->state = g_new0(CasildaCompositorToplevelState, 1);
 
       /* Start new windows in the top left corner */
       toplevel->state->x = 32;
@@ -1652,11 +1654,11 @@ xdg_toplevel_set_app_id(struct wl_listener *listener,G_GNUC_UNUSED  void *data)
 static void
 server_new_xdg_toplevel(struct wl_listener *listener, void *data)
 {
-  CmbCompositorPrivate *priv = wl_container_of(listener, priv, new_xdg_toplevel);
+  CasildaCompositorPrivate *priv = wl_container_of(listener, priv, new_xdg_toplevel);
   struct wlr_xdg_toplevel *xdg_toplevel = data;
-  CmbCompositorToplevel *toplevel;
+  CasildaCompositorToplevel *toplevel;
 
-  toplevel = g_new0(CmbCompositorToplevel, 1);
+  toplevel = g_new0(CasildaCompositorToplevel, 1);
   toplevel->priv = priv;
   toplevel->xdg_toplevel = xdg_toplevel;
   toplevel->scene_tree =
@@ -1691,7 +1693,7 @@ server_new_xdg_toplevel(struct wl_listener *listener, void *data)
 static void
 xdg_popup_commit(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 {
-  CmbCompositorPopup *popup = wl_container_of(listener, popup, commit);
+  CasildaCompositorPopup *popup = wl_container_of(listener, popup, commit);
 
   if (popup->xdg_popup->base->initial_commit)
     wlr_xdg_surface_schedule_configure(popup->xdg_popup->base);
@@ -1700,7 +1702,7 @@ xdg_popup_commit(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 static void
 xdg_popup_destroy(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 {
-  CmbCompositorPopup *popup = wl_container_of(listener, popup, destroy);
+  CasildaCompositorPopup *popup = wl_container_of(listener, popup, destroy);
 
   wl_list_remove(&popup->commit.link);
   wl_list_remove(&popup->destroy.link);
@@ -1710,7 +1712,7 @@ xdg_popup_destroy(struct wl_listener *listener, G_GNUC_UNUSED void *data)
 static void
 server_new_xdg_popup(G_GNUC_UNUSED struct wl_listener *listener, void *data)
 {
-  CmbCompositorPopup *popup = g_new0(CmbCompositorPopup, 1);
+  CasildaCompositorPopup *popup = g_new0(CasildaCompositorPopup, 1);
   struct wlr_xdg_popup *xdg_popup = data;
   struct wlr_xdg_surface *parent;
 
@@ -1732,7 +1734,7 @@ server_new_xdg_popup(G_GNUC_UNUSED struct wl_listener *listener, void *data)
 static void
 server_request_activate(struct wl_listener *listener, void *data)
 {
-  CmbCompositorPrivate *priv = wl_container_of(listener, priv, request_activate);
+  CasildaCompositorPrivate *priv = wl_container_of(listener, priv, request_activate);
   struct wlr_xdg_activation_v1_request_activate_event *event = data;
   struct wlr_xdg_toplevel *xdg_toplevel =
     wlr_xdg_toplevel_try_from_wlr_surface(event->surface);
@@ -1742,7 +1744,7 @@ server_request_activate(struct wl_listener *listener, void *data)
 
   for (GList *l = priv->toplevels; l; l = g_list_next(l))
     {
-      CmbCompositorToplevel *toplevel = l->data;
+      CasildaCompositorToplevel *toplevel = l->data;
 
       if (toplevel->xdg_toplevel != xdg_toplevel)
         continue;
@@ -1752,16 +1754,16 @@ server_request_activate(struct wl_listener *listener, void *data)
 }
 
 static gchar *
-cmb_compositor_get_socket()
+casilda_compositor_get_socket(void)
 {
-  gchar *tmp = g_dir_make_tmp("cmb-compositor-XXXXXX", NULL);
+  gchar *tmp = g_dir_make_tmp("Casilda-compositor-XXXXXX", NULL);
   gchar *retval = g_build_filename(tmp, "wayland.sock", NULL);
   g_free(tmp);
   return retval;
 }
 
 static void
-cmb_compositor_wlr_init(CmbCompositorPrivate *priv)
+casilda_compositor_wlr_init(CasildaCompositorPrivate *priv)
 {
   priv->wl_display = wl_display_create();
 
@@ -1819,35 +1821,35 @@ cmb_compositor_wlr_init(CmbCompositorPrivate *priv)
                             WL_SEAT_CAPABILITY_POINTER |
                             WL_SEAT_CAPABILITY_KEYBOARD);
 
-  priv->socket = cmb_compositor_get_socket();
+  priv->socket = casilda_compositor_get_socket();
 
   if (wl_display_add_socket(priv->wl_display, priv->socket))
     g_warning("Error adding socket file %s\n", priv->socket);
 }
 
 void
-cmb_compositor_set_bg_color(CmbCompositor *compositor,
+casilda_compositor_set_bg_color(CasildaCompositor *compositor,
                             gdouble red,
                             gdouble green,
                             gdouble blue)
 {
-  CmbCompositorPrivate *priv = GET_PRIVATE (compositor);
+  CasildaCompositorPrivate *priv = GET_PRIVATE (compositor);
   wlr_scene_rect_set_color(priv->bg, (float[4]){ red, green, blue, 1 });
 }
 
 
 void
-cmb_compositor_forget_toplevel_state(CmbCompositor *compositor)
+casilda_compositor_forget_toplevel_state(CasildaCompositor *compositor)
 {
-  CmbCompositorPrivate *priv = GET_PRIVATE (compositor);
+  CasildaCompositorPrivate *priv = GET_PRIVATE (compositor);
   g_hash_table_remove_all(priv->toplevel_state);
 }
 
 static void
-cmb_compositor_set_error_message(CmbCompositor *compositor,
+casilda_compositor_set_error_message(CasildaCompositor *compositor,
                                  const gchar   *message)
 {
-  CmbCompositorPrivate *priv = GET_PRIVATE (compositor);
+  CasildaCompositorPrivate *priv = GET_PRIVATE (compositor);
 
   priv->error_message = g_strdup(message);
 

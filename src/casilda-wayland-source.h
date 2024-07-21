@@ -24,6 +24,7 @@
 #pragma once
 
 #include <glib.h>
+#include <wayland-server-core.h>
 
-GSource *cmb_wayland_source_new ();
+GSource *casilda_wayland_source_new (struct wl_display *display);
 
