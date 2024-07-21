@@ -99,6 +99,7 @@ pkg.generate(
 )
 
 casilda_gir = gnome.generate_gir(casilda_lib,
+  sources: [casilda_headers, casilda_sources],
   nsversion: api_version,
   namespace: 'Casilda',
   symbol_prefix: 'casilda',
