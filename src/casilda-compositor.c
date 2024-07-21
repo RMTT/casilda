@@ -1074,7 +1074,9 @@ casilda_compositor_backend_destroy (struct wlr_backend *wlr_backend)
 static uint32_t
 casilda_compositor_backend_get_buffer_caps (G_GNUC_UNUSED struct wlr_backend *wlr_backend)
 {
-  return WLR_BUFFER_CAP_DATA_PTR | WLR_BUFFER_CAP_DMABUF | WLR_BUFFER_CAP_SHM;
+  return WLR_BUFFER_CAP_DATA_PTR |
+         WLR_BUFFER_CAP_SHM |
+         0;
 }
 
 static bool
