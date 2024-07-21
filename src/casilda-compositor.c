@@ -50,6 +50,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include <gtk/gtk.h>
+#include <glib/gstdio.h>
 
 #ifdef GDK_WINDOWING_WAYLAND
 #include <gdk/wayland/gdkwayland.h>
@@ -158,6 +159,7 @@ typedef struct
 
   /* GObject properties */
   gchar       *socket;
+  gboolean     owns_socket;
 
   gchar       *error_message;
   PangoLayout *error_layout;
@@ -1304,6 +1306,14 @@ casilda_compositor_cleanup (CasildaCompositor *object)
   CasildaCompositorPrivate *priv = GET_PRIVATE (object);
 
   g_clear_pointer (&priv->toplevel_state, g_hash_table_destroy);
+
+  if (priv->owns_socket)
+    {
+      priv->owns_socket = FALSE;
+      g_autofree char *socket_path = g_path_get_basename (priv->socket);
+      g_unlink (priv->socket);
+      g_rmdir (socket_path);
+    }
   g_clear_pointer (&priv->socket, g_free);
 
   g_clear_object (&priv->error_layout);
@@ -1342,6 +1352,8 @@ casilda_compositor_set_property (GObject      *object,
                                  const GValue *value,
                                  GParamSpec   *pspec)
 {
+  CasildaCompositorPrivate *priv = GET_PRIVATE (object);
+
   g_return_if_fail (CASILDA_IS_COMPOSITOR (object));
 
   switch (prop_id)
@@ -1349,6 +1361,11 @@ casilda_compositor_set_property (GObject      *object,
     case PROP_ERROR_MESSAGE:
       casilda_compositor_set_error_message (CASILDA_COMPOSITOR (object),
                                             g_value_get_string (value));
+      break;
+
+    case PROP_SOCKET:
+      g_set_str (&priv->socket, g_value_get_string (value));
+      priv->owns_socket = priv->socket != NULL;
       break;
 
     default:
@@ -1438,7 +1455,7 @@ casilda_compositor_class_init (CasildaCompositorClass *klass)
     g_param_spec_string ("socket", "Unix Socket",
                          "The unix socket file to connect to this compositor",
                          NULL,
-                         G_PARAM_READABLE);
+                         G_PARAM_READABLE|G_PARAM_WRITABLE|G_PARAM_CONSTRUCT_ONLY);
 
   properties[PROP_ERROR_MESSAGE] =
     g_param_spec_string ("error-message", "Error message",
@@ -1784,11 +1801,10 @@ server_request_activate (struct wl_listener *listener, void *data)
 static gchar *
 casilda_compositor_get_socket (void)
 {
-  gchar *tmp = g_dir_make_tmp ("Casilda-compositor-XXXXXX", NULL);
-  gchar *retval = g_build_filename (tmp, "wayland.sock", NULL);
+  g_autofree char *tmp = g_dir_make_tmp ("Casilda-compositor-XXXXXX", NULL);
+  g_autofree char *retval = g_build_filename (tmp, "wayland.sock", NULL);
 
-  g_free (tmp);
-  return retval;
+  return g_steal_pointer (&retval);
 }
 
 static void
@@ -1850,10 +1866,19 @@ casilda_compositor_wlr_init (CasildaCompositorPrivate *priv)
                              WL_SEAT_CAPABILITY_POINTER |
                              WL_SEAT_CAPABILITY_KEYBOARD);
 
-  priv->socket = casilda_compositor_get_socket ();
+  if (!priv->socket)
+    {
+      priv->socket = casilda_compositor_get_socket ();
+      priv->owns_socket = TRUE;
+    }
 
-  if (wl_display_add_socket (priv->wl_display, priv->socket))
-    g_warning ("Error adding socket file %s\n", priv->socket);
+  if (wl_display_add_socket (priv->wl_display, priv->socket) != 0)
+    {
+      g_warning ("Error adding socket file %s", priv->socket);
+      return;
+    }
+
+  g_debug ("Started at %s", priv->socket);
 }
 
 void
