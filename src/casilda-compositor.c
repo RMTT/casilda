@@ -171,7 +171,7 @@ typedef struct
 
 struct _CasildaCompositor
 {
-  GtkDrawingArea parent;
+  GtkWidget parent;
 };
 
 
@@ -230,8 +230,7 @@ static guint compositor_signals[LAST_SIGNAL] = { 0 };
 
 static GParamSpec *properties[N_PROPERTIES];
 
-
-G_DEFINE_TYPE_WITH_PRIVATE (CasildaCompositor, casilda_compositor, GTK_TYPE_DRAWING_AREA);
+G_DEFINE_TYPE_WITH_PRIVATE (CasildaCompositor, casilda_compositor, GTK_TYPE_WIDGET);
 #define GET_PRIVATE(d) ((CasildaCompositorPrivate *) casilda_compositor_get_instance_private ((CasildaCompositor *) d))
 
 
@@ -277,13 +276,13 @@ _cairo_format_from_pixman_format (pixman_format_code_t pixman_format)
 }
 
 static void
-casilda_compositor_draw (GtkDrawingArea        *area,
-                         cairo_t               *cr,
-                         int                    width,
-                         int                    height,
-                         G_GNUC_UNUSED gpointer data)
+casilda_compositor_draw (GtkDrawingArea *area G_GNUC_UNUSED,
+                         cairo_t        *cr,
+                         int             width,
+                         int             height,
+                         gpointer        user_data)
 {
-  CasildaCompositorPrivate *priv = GET_PRIVATE (area);
+  CasildaCompositorPrivate *priv = GET_PRIVATE (user_data);
   struct wlr_scene_output *scene_output = priv->scene_output;
 
   g_autoptr(WlrTexture) texture = NULL;
@@ -372,6 +371,7 @@ casilda_compositor_size_allocate (GtkWidget *widget, int w, int h, int b)
   struct wlr_output_state state;
 
   GTK_WIDGET_CLASS (casilda_compositor_parent_class)->size_allocate (widget, w, h, b);
+  gtk_widget_allocate (priv->widget, w, h, b, NULL);
 
   /* Update background rectangle size */
   wlr_scene_rect_set_size (priv->bg, w, h);
@@ -381,6 +381,21 @@ casilda_compositor_size_allocate (GtkWidget *widget, int w, int h, int b)
   wlr_output_state_set_custom_mode (&state, w, h, 0);
   wlr_output_commit_state (&priv->output, &state);
   wlr_output_state_finish (&state);
+}
+
+static void
+casilda_compositor_measure (GtkWidget      *widget,
+                            GtkOrientation  orientation,
+                            int             for_size,
+                            int            *minimum,
+                            int            *natural,
+                            int            *minimum_baseline,
+                            int            *natural_baseline)
+{
+  CasildaCompositorPrivate *priv = GET_PRIVATE (widget);
+
+  gtk_widget_measure (priv->widget, orientation, for_size, minimum, natural,
+                      minimum_baseline, natural_baseline);
 }
 
 static void
@@ -856,7 +871,7 @@ on_click_gesture_pressed (GtkGestureClick          *self,
 
   if (button == 3)
     {
-      g_signal_emit (priv->widget,
+      g_signal_emit (gtk_widget_get_parent (priv->widget),
                      compositor_signals[CONTEXT_MENU],
                      0,
                      (gint) x,
@@ -1275,11 +1290,8 @@ casilda_compositor_constructed (GObject *object)
 {
   CasildaCompositorPrivate *priv = GET_PRIVATE (object);
 
-  gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (object),
-                                  casilda_compositor_draw,
-                                  NULL,
-                                  NULL);
-  priv->widget = GTK_WIDGET (object);
+  priv->widget = gtk_drawing_area_new ();
+  gtk_widget_set_parent (priv->widget, GTK_WIDGET (object));
   gtk_widget_set_focusable (priv->widget, TRUE);
 
   /* Toplevel state */
@@ -1295,6 +1307,10 @@ casilda_compositor_constructed (GObject *object)
   casilda_compositor_keyboard_init (priv);
 
   casilda_compositor_reset_pointer_mode (priv);
+
+  gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (priv->widget),
+                                  casilda_compositor_draw,
+                                  object, NULL);
 
   priv->wl_source = casilda_wayland_source_new (priv->wl_display);
   g_source_attach (priv->wl_source, NULL);
@@ -1453,6 +1469,7 @@ casilda_compositor_class_init (CasildaCompositorClass *klass)
   object_class->set_property = casilda_compositor_set_property;
   object_class->get_property = casilda_compositor_get_property;
 
+  widget_class->measure = casilda_compositor_measure;
   widget_class->size_allocate = casilda_compositor_size_allocate;
   widget_class->realize = casilda_compositor_realize;
   widget_class->unrealize = casilda_compositor_unrealize;

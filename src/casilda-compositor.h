@@ -26,7 +26,7 @@
 #include <gtk/gtk.h>
 
 #define CASILDA_COMPOSITOR_TYPE (casilda_compositor_get_type ())
-G_DECLARE_FINAL_TYPE (CasildaCompositor, casilda_compositor, CASILDA, COMPOSITOR, GtkDrawingArea)
+G_DECLARE_FINAL_TYPE (CasildaCompositor, casilda_compositor, CASILDA, COMPOSITOR, GtkWidget)
 
 CasildaCompositor *casilda_compositor_new (const gchar * socket);
 void           casilda_compositor_cleanup (CasildaCompositor *object);
