@@ -1,0 +1,97 @@
+/* casilda-version.h.in
+ *
+ * Copyright 2024 Juan Pablo Ugarte
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ */
+
+#pragma once
+
+#if !defined(CASILDA_INSIDE) && !defined(CASILDA_COMPILATION)
+# error "Only <casilda.h> can be included directly."
+#endif
+
+/**
+ * SECTION:casildaversion
+ * @short_description: casilda version checking
+ *
+ * casilda provides macros to check the version of the library
+ * at compile-time
+ */
+
+/**
+ * CASILDA_MAJOR_VERSION:
+ *
+ * casilda major version component (e.g. 1 if %CASILDA_VERSION is 1.2.3)
+ */
+#define CASILDA_MAJOR_VERSION (@MAJOR_VERSION@)
+
+/**
+ * CASILDA_MINOR_VERSION:
+ *
+ * casilda minor version component (e.g. 2 if %CASILDA_VERSION is 1.2.3)
+ */
+#define CASILDA_MINOR_VERSION (@MINOR_VERSION@)
+
+/**
+ * CASILDA_MICRO_VERSION:
+ *
+ * casilda micro version component (e.g. 3 if %CASILDA_VERSION is 1.2.3)
+ */
+#define CASILDA_MICRO_VERSION (@MICRO_VERSION@)
+
+/**
+ * CASILDA_VERSION
+ *
+ * casilda version.
+ */
+#define CASILDA_VERSION (@VERSION@)
+
+/**
+ * CASILDA_VERSION_S:
+ *
+ * casilda version, encoded as a string, useful for printing and
+ * concatenation.
+ */
+#define CASILDA_VERSION_S "@VERSION@"
+
+#define CASILDA_ENCODE_VERSION(major,minor,micro) \
+        ((major) << 24 | (minor) << 16 | (micro) << 8)
+
+/**
+ * CASILDA_VERSION_HEX:
+ *
+ * casilda version, encoded as an hexadecimal number, useful for
+ * integer comparisons.
+ */
+#define CASILDA_VERSION_HEX \
+        (CASILDA_ENCODE_VERSION (CASILDA_MAJOR_VERSION, CASILDA_MINOR_VERSION, CASILDA_MICRO_VERSION))
+
+/**
+ * CASILDA_CHECK_VERSION:
+ * @major: required major version
+ * @minor: required minor version
+ * @micro: required micro version
+ *
+ * Compile-time version checking. Evaluates to %TRUE if the version
+ * of casilda is greater than the required one.
+ */
+#define CASILDA_CHECK_VERSION(major,minor,micro)   \
+        (CASILDA_MAJOR_VERSION > (major) || \
+         (CASILDA_MAJOR_VERSION == (major) && CASILDA_MINOR_VERSION > (minor)) || \
+         (CASILDA_MAJOR_VERSION == (major) && CASILDA_MINOR_VERSION == (minor) && \
+          CASILDA_MICRO_VERSION >= (micro)))

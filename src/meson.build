@@ -1,4 +1,33 @@
-wlroots_dep = dependency('wlroots-0.18', version: '>= 0.18.0')
+api_version = '0.1'
+
+casilda_sources = [
+  'casilda_compositor.c',
+  'casilda_wayland_source.c',
+]
+
+casilda_headers = [
+  'casilda.h',
+  'casilda_compositor.h',
+  'casilda_wayland_source.h',
+]
+
+version_split = meson.project_version().split('.')
+version_conf = configuration_data()
+version_conf.set('VERSION', meson.project_version())
+version_conf.set('MAJOR_VERSION', version_split[0])
+version_conf.set('MINOR_VERSION', version_split[1])
+version_conf.set('MICRO_VERSION', version_split[2])
+
+configure_file(
+          input: 'casilda-version.h.in',
+         output: 'casilda-version.h',
+  configuration: version_conf,
+        install: true,
+    install_dir: get_option('includedir') / 'casilda'
+)
+
+gtk4_dep = dependency('gtk4', version: '>= 4.14')
+wlroots_dep = dependency('wlroots', version: '>= 0.18')
 wayland_server_dep = dependency('wayland-server', version: '>=1.22')
 epoxy_dep = dependency('epoxy', version: '>=1.5')
 xkbcommon = dependency(
@@ -30,7 +59,7 @@ wayland_scanner = find_program(
   native: true,
 )
 
-lib_dependencies = [
+casilda_deps = [
   gtk4_dep,
   wlroots_dep,
   xkbcommon,
@@ -43,7 +72,7 @@ lib_dependencies = [
 lib_c_args = []
 
 if xkbcommon_x11_dep.found() and x11_xcb_dep.found()
-  lib_dependencies += [xkbcommon_x11_dep, x11_xcb_dep]
+  casilda_deps += [xkbcommon_x11_dep, x11_xcb_dep]
   lib_c_args += ['-DHAVE_X11_XCB=1']
 endif
 
@@ -66,32 +95,33 @@ wayland_protocol_sources = [
   xdg_shell_server_h,
  ]
 
-sources = [
-  'cmb_compositor.c',
-  'cmb_wayland_source.c',
-]
-
-headers = [
-  'cambalache.h',
-  'cmb_wayland_source.h',
-  'cmb_compositor.h',
-]
-
-cambalache = shared_library('cambalache-1',
-  sources + wayland_protocol_sources,
-  dependencies: lib_dependencies,
-  c_args : lib_c_args,
-  install: true,
+casilda_lib = shared_library('casilda-' + api_version,
+  casilda_sources + wayland_protocol_sources,
+  dependencies: casilda_deps,
+        c_args: lib_c_args,
+       install: true,
 )
 
-gnome.generate_gir(
-  cambalache,
-  sources: sources + headers,
-  includes: 'Gtk-4.0',
-  nsversion: '1.0',
-  namespace: 'Cambalache',
-  identifier_prefix: 'Cmb',
-  symbol_prefix: 'cmb',
-  header: 'cambalache.h',
-  install: true,
+install_headers(casilda_headers, subdir: 'casilda')
+
+pkg = import('pkgconfig')
+pkg.generate(
+  description: 'A simple Gtk wayland compositor widget',
+    libraries: casilda_lib,
+         name: 'casilda',
+     filebase: 'casilda-' + api_version,
+      version: meson.project_version(),
+      subdirs: 'casilda',
+     requires: 'gtk-4.0',
+  install_dir: get_option('libdir') / 'pkgconfig'
+)
+
+gnome = import('gnome')
+casilda_gir = gnome.generate_gir(casilda_lib,
+            nsversion: api_version,
+            namespace: 'Casilda',
+        symbol_prefix: 'casilda',
+    identifier_prefix: 'Casilda',
+             includes: [ 'Gtk-4.0' ],
+              install: true,
 )
