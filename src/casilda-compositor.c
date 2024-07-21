@@ -1266,7 +1266,12 @@ casilda_compositor_keyboard_init (CasildaCompositorPrivate *priv)
 }
 
 static void
-casilda_compositor_init (CasildaCompositor *object)
+casilda_compositor_init (CasildaCompositor *)
+{
+}
+
+static void
+casilda_compositor_constructed (GObject *object)
 {
   CasildaCompositorPrivate *priv = GET_PRIVATE (object);
 
@@ -1298,6 +1303,8 @@ casilda_compositor_init (CasildaCompositor *object)
   if (!wlr_backend_start (&priv->backend))
     /* TODO: handle error */
     return;
+
+  G_OBJECT_CLASS (casilda_compositor_parent_class)->constructed (object);
 }
 
 void
@@ -1344,7 +1351,6 @@ casilda_compositor_finalize (GObject *object)
   casilda_compositor_cleanup (CASILDA_COMPOSITOR (object));
   G_OBJECT_CLASS (casilda_compositor_parent_class)->finalize (object);
 }
-
 
 static void
 casilda_compositor_set_property (GObject      *object,
@@ -1442,6 +1448,7 @@ casilda_compositor_class_init (CasildaCompositorClass *klass)
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
+  object_class->constructed = casilda_compositor_constructed;
   object_class->finalize = casilda_compositor_finalize;
   object_class->set_property = casilda_compositor_set_property;
   object_class->get_property = casilda_compositor_get_property;
