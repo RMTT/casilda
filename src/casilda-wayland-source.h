@@ -27,4 +27,3 @@
 #include <wayland-server-core.h>
 
 GSource *casilda_wayland_source_new (struct wl_display *display);
-
