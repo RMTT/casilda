@@ -43,3 +43,4 @@ configure_file(output: 'config.h', configuration: config_h)
 add_project_arguments(['-I' + meson.project_build_root()], language: 'c')
 
 subdir('src')
+subdir('examples')

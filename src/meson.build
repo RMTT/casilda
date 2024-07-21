@@ -79,6 +79,12 @@ casilda_lib = shared_library('casilda-' + api_version,
   install: true,
 )
 
+casilda_dep = declare_dependency(
+  include_directories: include_directories('.'),
+  link_with: casilda_lib,
+  dependencies: gtk4_dep,
+)
+
 install_headers(casilda_headers, subdir: 'casilda')
 
 pkg.generate(
