@@ -1,5 +1,5 @@
 /*
- * Cambalache Wayland Compositor Widget
+ * Casilda Wayland Compositor Widget
  *
  * Copyright (C) 2024  Juan Pablo Ugarte
  *

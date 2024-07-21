@@ -1,5 +1,5 @@
 /*
- * Cambalache Wayland GLib Integration
+ * Casilda Wayland GLib Integration
  *
  * Copyright (C) 2024  Juan Pablo Ugarte
  *
