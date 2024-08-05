@@ -94,7 +94,7 @@ pkg.generate(
   filebase: 'casilda-' + api_version,
   version: meson.project_version(),
   subdirs: 'casilda',
-  requires: 'gtk-4.0',
+  requires: [ 'gtk4', 'wlroots-0.18' ],
   install_dir: get_option('libdir') / 'pkgconfig'
 )
 
