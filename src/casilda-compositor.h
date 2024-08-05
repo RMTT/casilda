@@ -28,10 +28,4 @@
 #define CASILDA_COMPOSITOR_TYPE (casilda_compositor_get_type ())
 G_DECLARE_FINAL_TYPE (CasildaCompositor, casilda_compositor, CASILDA, COMPOSITOR, GtkWidget)
 
-CasildaCompositor *casilda_compositor_new (const gchar * socket);
-void           casilda_compositor_cleanup (CasildaCompositor *object);
-void           casilda_compositor_set_bg_color (CasildaCompositor *compositor,
-                                                gdouble            red,
-                                                gdouble            green,
-                                                gdouble            blue);
-void           casilda_compositor_forget_toplevel_state (CasildaCompositor *compositor);
+CasildaCompositor *casilda_compositor_new (const gchar *socket);

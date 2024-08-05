@@ -74,9 +74,9 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC (cairo_surface_t, cairo_surface_destroy);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (pixman_image_t, pixman_image_unref);
 
 typedef enum {
-  casilda_POINTER_MODE_FOWARD,
-  casilda_POINTER_MODE_RESIZE,
-  casilda_POINTER_MODE_MOVE,
+  CASILDA_POINTER_MODE_FOWARD,
+  CASILDA_POINTER_MODE_RESIZE,
+  CASILDA_POINTER_MODE_MOVE,
 } CasildaPointerMode;
 
 typedef struct CasildaCompositorToplevel CasildaCompositorToplevel;
@@ -160,12 +160,6 @@ typedef struct
   /* GObject properties */
   gchar       *socket;
   gboolean     owns_socket;
-
-  gchar       *error_message;
-  PangoLayout *error_layout;
-  gint         error_layout_width;
-  gint         error_layout_height;
-
 } CasildaCompositorPrivate;
 
 
@@ -215,18 +209,10 @@ typedef struct
 enum {
   PROP_0,
   PROP_SOCKET,
-  PROP_ERROR_MESSAGE,
+  PROP_BG_COLOR,
 
   N_PROPERTIES
 };
-
-enum {
-  CONTEXT_MENU,
-
-  LAST_SIGNAL
-};
-
-static guint compositor_signals[LAST_SIGNAL] = { 0 };
 
 static GParamSpec *properties[N_PROPERTIES];
 
@@ -235,9 +221,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (CasildaCompositor, casilda_compositor, GTK_TYPE_WIDG
 
 
 static void casilda_compositor_wlr_init (CasildaCompositorPrivate *priv);
-static void casilda_compositor_set_error_message (CasildaCompositor *compositor,
-                                                  const gchar       *message);
-
+static void casilda_compositor_set_bg_color (CasildaCompositor *compositor,
+                                             GdkRGBA           *bg);
 
 static cairo_format_t
 _cairo_format_from_pixman_format (pixman_format_code_t pixman_format)
@@ -276,11 +261,11 @@ _cairo_format_from_pixman_format (pixman_format_code_t pixman_format)
 }
 
 static void
-casilda_compositor_draw (GtkDrawingArea *area G_GNUC_UNUSED,
-                         cairo_t        *cr,
-                         int             width,
-                         int             height,
-                         gpointer        user_data)
+casilda_compositor_draw (GtkDrawingArea   *area G_GNUC_UNUSED,
+                         cairo_t          *cr,
+                         G_GNUC_UNUSED int width,
+                         G_GNUC_UNUSED int height,
+                         gpointer          user_data)
 {
   CasildaCompositorPrivate *priv = GET_PRIVATE (user_data);
   struct wlr_scene_output *scene_output = priv->scene_output;
@@ -291,15 +276,6 @@ casilda_compositor_draw (GtkDrawingArea *area G_GNUC_UNUSED,
   cairo_format_t format;
   struct timespec now;
   g_auto(WlrOutputState) state = {0, };
-
-  if (priv->error_message)
-    {
-      cairo_move_to (cr,
-                     width / 2 - priv->error_layout_width / 2,
-                     height / 2 - priv->error_layout_height / 2);
-      pango_cairo_show_layout (cr, priv->error_layout);
-      return;
-    }
 
   wlr_output_state_init (&state);
 
@@ -424,7 +400,7 @@ casilda_composite_reset_cursor (CasildaCompositorPrivate *priv)
 static void
 casilda_compositor_reset_pointer_mode (CasildaCompositorPrivate *priv)
 {
-  priv->pointer_mode = casilda_POINTER_MODE_FOWARD;
+  priv->pointer_mode = CASILDA_POINTER_MODE_FOWARD;
   priv->grabbed_toplevel = NULL;
 }
 
@@ -673,7 +649,7 @@ casilda_compositor_handle_pointer_resize_toplevel (CasildaCompositorPrivate *pri
 static void
 casilda_compositor_handle_pointer_motion (CasildaCompositorPrivate *priv)
 {
-  if (priv->pointer_mode == casilda_POINTER_MODE_MOVE)
+  if (priv->pointer_mode == CASILDA_POINTER_MODE_MOVE)
     {
       wlr_scene_node_set_position (&priv->grabbed_toplevel->scene_tree->node,
                                    priv->pointer_x - priv->grab_x,
@@ -681,7 +657,7 @@ casilda_compositor_handle_pointer_motion (CasildaCompositorPrivate *priv)
 
       casilda_compositor_toplevel_save_position (priv->grabbed_toplevel);
     }
-  else if (priv->pointer_mode == casilda_POINTER_MODE_RESIZE)
+  else if (priv->pointer_mode == CASILDA_POINTER_MODE_RESIZE)
     {
       casilda_compositor_handle_pointer_resize_toplevel (priv);
     }
@@ -861,38 +837,25 @@ casilda_compositor_seat_pointer_notify (GtkGestureClick             *self,
 static void
 on_click_gesture_pressed (GtkGestureClick          *self,
                           G_GNUC_UNUSED gint        n_press,
-                          gdouble                   x,
-                          gdouble                   y,
+                          G_GNUC_UNUSED gdouble     x,
+                          G_GNUC_UNUSED gdouble     y,
                           CasildaCompositorPrivate *priv)
 {
   gint button = gtk_gesture_single_get_current_button (GTK_GESTURE_SINGLE (self));
 
   gtk_widget_grab_focus (priv->widget);
 
-  if (button == 3)
-    {
-      g_signal_emit (gtk_widget_get_parent (priv->widget),
-                     compositor_signals[CONTEXT_MENU],
-                     0,
-                     (gint) x,
-                     (gint) y);
-      return;
-    }
-
   casilda_compositor_seat_pointer_notify (self, priv, button, WL_POINTER_BUTTON_STATE_PRESSED);
 }
 
 static void
-on_click_gesture_released (GtkGestureClick         * self,
+on_click_gesture_released (GtkGestureClick          *self,
                            G_GNUC_UNUSED gint        n_press,
                            G_GNUC_UNUSED gdouble     x,
                            G_GNUC_UNUSED gdouble     y,
                            CasildaCompositorPrivate *priv)
 {
   gint button = gtk_gesture_single_get_current_button (GTK_GESTURE_SINGLE (self));
-
-  if (button == 3)
-    return;
 
   casilda_compositor_seat_pointer_notify (self, priv, button, WL_POINTER_BUTTON_STATE_RELEASED);
 }
@@ -909,7 +872,7 @@ casilda_compositor_seat_key_notify (GtkEventControllerKey    *self,
 }
 
 static gboolean
-on_key_controller_key_pressed (GtkEventControllerKey       * self,
+on_key_controller_key_pressed (GtkEventControllerKey        *self,
                                G_GNUC_UNUSED guint           keyval,
                                guint                         keycode,
                                G_GNUC_UNUSED GdkModifierType state,
@@ -1325,8 +1288,8 @@ casilda_compositor_constructed (GObject *object)
   G_OBJECT_CLASS (casilda_compositor_parent_class)->constructed (object);
 }
 
-void
-casilda_compositor_cleanup (CasildaCompositor *object)
+static void
+casilda_compositor_finalize (GObject *object)
 {
   CasildaCompositorPrivate *priv = GET_PRIVATE (object);
 
@@ -1341,7 +1304,6 @@ casilda_compositor_cleanup (CasildaCompositor *object)
     }
   g_clear_pointer (&priv->socket, g_free);
 
-  g_clear_object (&priv->error_layout);
   g_clear_object (&priv->motion_controller);
   g_clear_object (&priv->scroll_controller);
   g_clear_object (&priv->key_controller);
@@ -1361,12 +1323,7 @@ casilda_compositor_cleanup (CasildaCompositor *object)
   wl_display_destroy (priv->wl_display);
 
   g_source_destroy (priv->wl_source);
-}
 
-static void
-casilda_compositor_finalize (GObject *object)
-{
-  casilda_compositor_cleanup (CASILDA_COMPOSITOR (object));
   G_OBJECT_CLASS (casilda_compositor_parent_class)->finalize (object);
 }
 
@@ -1382,15 +1339,15 @@ casilda_compositor_set_property (GObject      *object,
 
   switch (prop_id)
     {
-    case PROP_ERROR_MESSAGE:
-      casilda_compositor_set_error_message (CASILDA_COMPOSITOR (object),
-                                            g_value_get_string (value));
-      break;
-
     case PROP_SOCKET:
       g_set_str (&priv->socket, g_value_get_string (value));
       priv->owns_socket = priv->socket != NULL;
       break;
+
+    case PROP_BG_COLOR:
+        casilda_compositor_set_bg_color (CASILDA_COMPOSITOR (object),
+                                         g_value_get_boxed (value));
+        break;
 
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1413,10 +1370,6 @@ casilda_compositor_get_property (GObject    *object,
     {
     case PROP_SOCKET:
       g_value_set_string (value, priv->socket);
-      break;
-
-    case PROP_ERROR_MESSAGE:
-      g_value_set_string (value, pango_layout_get_text (priv->error_layout));
       break;
 
     default:
@@ -1483,21 +1436,11 @@ casilda_compositor_class_init (CasildaCompositorClass *klass)
                          NULL,
                          G_PARAM_READABLE|G_PARAM_WRITABLE|G_PARAM_CONSTRUCT_ONLY);
 
-  properties[PROP_ERROR_MESSAGE] =
-    g_param_spec_string ("error-message", "Error message",
-                         "Error message to show instead of compositor",
-                         NULL,
-                         G_PARAM_READWRITE);
-
-  /* Signals */
-  compositor_signals[CONTEXT_MENU] =
-    g_signal_new ("context-menu",
-                  G_OBJECT_CLASS_TYPE (klass),
-                  0, 0,
-                  NULL, NULL, NULL,
-                  G_TYPE_NONE, 2,
-                  G_TYPE_INT,
-                  G_TYPE_INT);
+  properties[PROP_BG_COLOR] =
+    g_param_spec_boxed ("bg-color", "Background color",
+                        "Compositor background color",
+                        GDK_TYPE_RGBA,
+                        G_PARAM_WRITABLE);
 
   g_object_class_install_properties (object_class, N_PROPERTIES, properties);
 }
@@ -1630,7 +1573,7 @@ xdg_toplevel_request_move (struct wl_listener *listener, G_GNUC_UNUSED void *dat
     return;
 
   priv->grabbed_toplevel = toplevel;
-  priv->pointer_mode = casilda_POINTER_MODE_MOVE;
+  priv->pointer_mode = CASILDA_POINTER_MODE_MOVE;
   priv->grab_x = priv->pointer_x - toplevel->scene_tree->node.x;
   priv->grab_y = priv->pointer_y - toplevel->scene_tree->node.y;
 }
@@ -1649,7 +1592,7 @@ xdg_toplevel_request_resize (struct wl_listener *listener, void *data)
     return;
 
   priv->grabbed_toplevel = toplevel;
-  priv->pointer_mode = casilda_POINTER_MODE_RESIZE;
+  priv->pointer_mode = CASILDA_POINTER_MODE_RESIZE;
   priv->resize_edges = event->edges;
 
   wlr_xdg_surface_get_geometry (toplevel->xdg_toplevel->base, &box);
@@ -1827,7 +1770,7 @@ server_request_activate (struct wl_listener *listener, void *data)
 static gchar *
 casilda_compositor_get_socket (void)
 {
-  g_autofree char *tmp = g_dir_make_tmp ("Casilda-compositor-XXXXXX", NULL);
+  g_autofree char *tmp = g_dir_make_tmp ("casilda-compositor-XXXXXX", NULL);
   g_autofree char *retval = g_build_filename (tmp, "wayland.sock", NULL);
 
   return g_steal_pointer (&retval);
@@ -1907,47 +1850,15 @@ casilda_compositor_wlr_init (CasildaCompositorPrivate *priv)
   g_debug ("Started at %s", priv->socket);
 }
 
-void
-casilda_compositor_set_bg_color (CasildaCompositor *compositor,
-                                 gdouble            red,
-                                 gdouble            green,
-                                 gdouble            blue)
-{
-  CasildaCompositorPrivate *priv = GET_PRIVATE (compositor);
-
-  wlr_scene_rect_set_color (priv->bg, (float[4]){ red, green, blue, 1 });
-}
-
-
-void
-casilda_compositor_forget_toplevel_state (CasildaCompositor *compositor)
-{
-  CasildaCompositorPrivate *priv = GET_PRIVATE (compositor);
-
-  g_hash_table_remove_all (priv->toplevel_state);
-}
-
 static void
-casilda_compositor_set_error_message (CasildaCompositor *compositor,
-                                      const gchar       *message)
+casilda_compositor_set_bg_color (CasildaCompositor *compositor,
+                                 GdkRGBA           *bg)
 {
   CasildaCompositorPrivate *priv = GET_PRIVATE (compositor);
 
-  priv->error_message = g_strdup (message);
+  if (bg == NULL)
+    return;
 
-  if (!priv->error_layout)
-    priv->error_layout = pango_layout_new (gtk_widget_get_pango_context (priv->widget));
-
-  if (message)
-    {
-      gint width, height;
-
-      pango_layout_set_text (priv->error_layout, message, -1);
-      pango_layout_get_size (priv->error_layout, &width, &height);
-
-      priv->error_layout_width = PANGO_PIXELS (width);
-      priv->error_layout_height = PANGO_PIXELS (height);
-    }
-
-  gtk_widget_queue_draw (priv->widget);
+  wlr_scene_rect_set_color (priv->bg, (float[4]){ bg->red, bg->green, bg->blue, bg->alpha });
 }
+
