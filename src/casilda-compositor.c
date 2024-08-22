@@ -22,6 +22,7 @@
  */
 
 #define WLR_USE_UNSTABLE 1
+#define G_LOG_DOMAIN "Casilda"
 
 #include <linux/input-event-codes.h>
 #include <wayland-server-core.h>
@@ -120,8 +121,6 @@ typedef struct
   /* wlr interfaces */
   struct wlr_backend_impl backend_impl;
   struct wlr_output_impl  output_impl;
-
-  gboolean                backend_started;
 
   /* XDG shell */
   struct wlr_xdg_shell *xdg_shell;
@@ -1019,9 +1018,7 @@ static bool
 casilda_compositor_backend_start (struct wlr_backend *wlr_backend)
 {
   CasildaCompositorPrivate *priv = wl_container_of (wlr_backend, priv, backend);
-
-  g_info ("Starting Casilda backend");
-  priv->backend_started = true;
+  g_info ("Starting Casilda backend at %s", priv->socket);
   return true;
 }
 
@@ -1283,7 +1280,7 @@ casilda_compositor_constructed (GObject *object)
   /* Start the backend. */
   if (!wlr_backend_start (&priv->backend))
     /* TODO: handle error */
-    return;
+    g_warning("Could not start backend");
 
   G_OBJECT_CLASS (casilda_compositor_parent_class)->constructed (object);
 }
@@ -1473,8 +1470,6 @@ xdg_toplevel_map (struct wl_listener *listener, G_GNUC_UNUSED void *data)
 
   toplevel->priv->toplevels = g_list_prepend (toplevel->priv->toplevels, toplevel);
 
-  casilda_compositor_focus_toplevel (toplevel, xdg_toplevel->base->surface);
-
   if (state)
     {
       /* Restore this window state */
@@ -1511,6 +1506,8 @@ xdg_toplevel_map (struct wl_listener *listener, G_GNUC_UNUSED void *data)
                                                  state->height);
         }
     }
+  else
+    casilda_compositor_focus_toplevel (toplevel, xdg_toplevel->base->surface);
 }
 
 static void
@@ -1634,8 +1631,11 @@ xdg_toplevel_set_app_id (struct wl_listener *listener, G_GNUC_UNUSED void *data)
     wl_container_of (listener, toplevel, set_app_id);
   const gchar *app_id = toplevel->xdg_toplevel->app_id;
 
-  toplevel->state = NULL;
-
+  /*
+   * NOTE: set_app_id is not supported
+   * Instead it is used as a window unique id to keep track of windows state
+   * Ideally this should be implemented with a session extension.
+   */
   if (!g_str_has_prefix (app_id, "Casilda:"))
     return;
 
@@ -1763,7 +1763,7 @@ server_request_activate (struct wl_listener *listener, void *data)
       if (toplevel->xdg_toplevel != xdg_toplevel)
         continue;
 
-      wlr_scene_node_raise_to_top (&toplevel->scene_tree->node);
+      casilda_compositor_focus_toplevel (toplevel, xdg_toplevel->base->surface);
     }
 }
 
@@ -1842,12 +1842,7 @@ casilda_compositor_wlr_init (CasildaCompositorPrivate *priv)
     }
 
   if (wl_display_add_socket (priv->wl_display, priv->socket) != 0)
-    {
-      g_warning ("Error adding socket file %s", priv->socket);
-      return;
-    }
-
-  g_debug ("Started at %s", priv->socket);
+    g_warning ("Error adding socket file %s", priv->socket);
 }
 
 static void
@@ -1861,4 +1856,5 @@ casilda_compositor_set_bg_color (CasildaCompositor *compositor,
 
   wlr_scene_rect_set_color (priv->bg, (float[4]){ bg->red, bg->green, bg->blue, bg->alpha });
 }
+
 
