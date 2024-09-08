@@ -1,16 +1,18 @@
-# casilda
+# Casilda
 
-A simple wayland compositor widget for Gtk 4.
-Originally created for [Cambalache](https://gitlab.gnome.org/jpu/cambalache)
-workspace, it is useful for embedding other processes windows.
+A simple Wayland compositor widget for Gtk 4 which can be used to embed other
+processes windows in your Gtk 4 application.
 
-The name follows the tradition of naming Wayland related projects after towns.
-My hometown in Santa Fe, Argentina.
+It was originally created for Cambalache's workspace using wlroots,
+a modular library to create Wayland compositors.
+
+Following Wayland tradition, this library is named after my hometown in
+Santa Fe, Argentina.
 
 ## License
 
 Casilda is distributed under the [GNU Lesser General Public License](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html),
-version 2.1 (LGPL) as described in the COPYING file.
+version 2.1 only (LGPL) as described in the COPYING file.
 
 ## Source code
 
@@ -36,6 +38,35 @@ meson setup --wipe --prefix=~/.local _build .
 # Build and install in ~/.local
 ninja -C _build install
 ```
+
+## How to use it
+
+To add a Wayland compositor to your application all you have to do is create a
+CasildaCompositor widget.
+
+You can specify which UNIX socket the compositor will listen for clients
+connections or let it will choose one automatically.
+
+```
+compositor = casilda_compositor_new ("/tmp/casilda-example.sock");
+gtk_window_set_child (GTK_WINDOW (window), GTK_WIDGET (compositor));
+```
+
+Once the compositor is running you can connect to it by specifying the socket
+in WAYLAND_DISPLAY environment variable.
+
+```
+export GDK_BACKEND=wayland
+export WAYLAND_DISPLAY=/tmp/casilda-example.sock
+gtk4-demo
+```
+
+## API
+
+The api is pretty simple CasildaCompositor has two properties.
+
+- socket: The unix socket file to connect to this compositor (string)
+- bg-color: Compositor background color (GdkRGBA)
 
 ## Contributing
 
