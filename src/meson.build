@@ -109,10 +109,12 @@ casilda_gir = gnome.generate_gir(casilda_lib,
   extra_args: [ '--c-include=casilda.h' ]
 )
 
-casilda_vapi = gnome.generate_vapi('casilda-' + api_version,
-  sources: casilda_gir[0],
-  install: true,
-  packages: [ 'gtk4' ],
-  install_dir: get_option('datadir') / 'vala' / 'vapi',
-  metadata_dirs: [ meson.current_source_dir() ]
-)
+if get_option('vapi')
+    casilda_vapi = gnome.generate_vapi('casilda-' + api_version,
+      sources: casilda_gir[0],
+      install: true,
+      packages: [ 'gtk4' ],
+      install_dir: get_option('datadir') / 'vala' / 'vapi',
+      metadata_dirs: [ meson.current_source_dir() ]
+    )
+endif
