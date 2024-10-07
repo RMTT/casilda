@@ -1,0 +1,7 @@
+option(
+    'vapi',
+    
+    type: 'boolean',
+    value: false,
+    description: 'Whether to build vapi files'
+)

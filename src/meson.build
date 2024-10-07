@@ -106,4 +106,15 @@ casilda_gir = gnome.generate_gir(casilda_lib,
   identifier_prefix: 'Casilda',
   includes: [ 'Gtk-4.0' ],
   install: true,
+  extra_args: [ '--c-include=casilda.h' ]
 )
+
+if get_option('vapi')
+    casilda_vapi = gnome.generate_vapi('casilda-' + api_version,
+      sources: casilda_gir[0],
+      install: true,
+      packages: [ 'gtk4' ],
+      install_dir: get_option('datadir') / 'vala' / 'vapi',
+      metadata_dirs: [ meson.current_source_dir() ]
+    )
+endif
