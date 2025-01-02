@@ -69,6 +69,8 @@ if xkbcommon_x11_dep.found() and x11_xcb_dep.found()
   lib_c_args += ['-DHAVE_X11_XCB=1']
 endif
 
+# Remove soversion once Meson is updated to support this autoomatically
+# https://mesonbuild.com/Reference-manual_functions.html#shared_library_version
 casilda_lib = shared_library('casilda-' + api_version,
   sources: [
     casilda_sources,
