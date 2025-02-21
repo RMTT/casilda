@@ -23,6 +23,7 @@
  * SPDX-License-Identifier: LGPL-2.1-only
  */
 
+#define _POSIX_C_SOURCE 199309L
 #define WLR_USE_UNSTABLE 1
 #define G_LOG_DOMAIN "Casilda"
 
@@ -1529,9 +1530,10 @@ static void
 xdg_toplevel_commit (struct wl_listener *listener, G_GNUC_UNUSED void *data)
 {
   CasildaCompositorToplevel *toplevel = wl_container_of (listener, toplevel, commit);
+  GtkWidget *widget = toplevel->priv->widget;
 
   if (toplevel->xdg_toplevel->base->initial_commit)
-    wlr_xdg_toplevel_set_size (toplevel->xdg_toplevel, 0, 0);
+    wlr_xdg_toplevel_set_size (toplevel->xdg_toplevel,gtk_widget_get_width (widget), gtk_widget_get_height (widget));
 }
 
 static void
@@ -1693,14 +1695,14 @@ server_new_xdg_toplevel (struct wl_listener *listener, void *data)
   toplevel->destroy.notify = xdg_toplevel_destroy;
   wl_signal_add (&xdg_toplevel->events.destroy, &toplevel->destroy);
 
-  toplevel->request_move.notify = xdg_toplevel_request_move;
-  wl_signal_add (&xdg_toplevel->events.request_move, &toplevel->request_move);
-  toplevel->request_resize.notify = xdg_toplevel_request_resize;
-  wl_signal_add (&xdg_toplevel->events.request_resize, &toplevel->request_resize);
-  toplevel->request_maximize.notify = xdg_toplevel_request_maximize;
-  wl_signal_add (&xdg_toplevel->events.request_maximize, &toplevel->request_maximize);
-  toplevel->request_fullscreen.notify = xdg_toplevel_request_fullscreen;
-  wl_signal_add (&xdg_toplevel->events.request_fullscreen, &toplevel->request_fullscreen);
+  // toplevel->request_move.notify = xdg_toplevel_request_move;
+  // wl_signal_add (&xdg_toplevel->events.request_move, &toplevel->request_move);
+  // toplevel->request_resize.notify = xdg_toplevel_request_resize;
+  // wl_signal_add (&xdg_toplevel->events.request_resize, &toplevel->request_resize);
+  // toplevel->request_maximize.notify = xdg_toplevel_request_maximize;
+  // wl_signal_add (&xdg_toplevel->events.request_maximize, &toplevel->request_maximize);
+  // toplevel->request_fullscreen.notify = xdg_toplevel_request_fullscreen;
+  // wl_signal_add (&xdg_toplevel->events.request_fullscreen, &toplevel->request_fullscreen);
 
   toplevel->set_app_id.notify = xdg_toplevel_set_app_id;
   wl_signal_add (&xdg_toplevel->events.set_app_id, &toplevel->set_app_id);
